@@ -2,14 +2,14 @@
 <launch>
     <!-- Can be set as argument during roslaunch -->
     <arg name="is_test" default="false" /> <!-- if TRUE, log casas data to test agent instead of kyoto -->
-    <arg name="save_task" default="false" />
     <arg name="test_error" default="false" />
     <arg name="use_location" default="false" /> <!-- if FALSE, uses only estimote sensors, TRUE includes ambient sensors -->
+    <arg name="plot_robotxy" default="false" />
 
     <include file="$(find adl_error_detection)/launch/detect_error.launch">
         <arg name="is_test" value="$(arg is_test)" />
-        <arg name="save_task" value="$(arg save_task)" />
         <arg name="test_error" value="$(arg test_error)" />
         <arg name="use_location" value="$(arg use_location)" />
+        <arg name="plot_robotxy" value="$(arg plot_robotxy)" />
     </include>
 </launch>
