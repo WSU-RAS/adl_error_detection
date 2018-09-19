@@ -111,25 +111,29 @@ class Items(object):
 class Locations(object):
 
     encode = {
-        'L': (0, 'living_room', [Task.WALK_DOG, Task.TAKE_MEDS, Task.WATER_PLANTS]),
-        'K': (1, 'kitchen', [Task.TAKE_MEDS, Task.WATER_PLANTS]),
-        'KH': (2, 'kitchen_hallway', [Task.WALK_DOG]),
-        'H': (3, 'hallway', [Task.WALK_DOG])
+        'L': (0, 'living_entertainment', [Task.WALK_DOG, Task.TAKE_MEDS, Task.WATER_PLANTS]),
+        'LD': (1, 'living_dining', [Task.WALK_DOG, Task.TAKE_MEDS, Task.WATER_PLANTS]),
+        'K': (2, 'kitchen', [Task.TAKE_MEDS, Task.WATER_PLANTS]),
+        'KH': (3, 'kitchen_hallway', [Task.WALK_DOG]),
+        'H': (4, 'hallway', [Task.WALK_DOG])
     }
 
     decode = {
         #Ambient sensors
 
         #Living room left side
-        #'M001': 'L', #Exclude, too close to M023(hallway)
-        'M002': 'L', 'M003': 'L', 'M004': 'L', 'M006': 'L',
-        'M007': 'L', 'M008': 'L', 'M009': 'L', 'M010': 'L',
-        #Living room right side
-        'M012': 'L', 'M013': 'L', 'M014': 'L',
-        #'M015': 'L', #Exclude, too close to M016(kitchen)
+        'M002': 'L', 'M003': 'L',
+        'M006': 'LD', 'M007': 'LD',
+
+        #Living room to Dining room
+        'M008': 'LD',
+
+        #Dining room
+        'M009': 'LD', 'M010': 'LD',
+        'M013': 'LD', 'M014': 'LD',
 
         #Kitchen
-        'M016': 'K', 'M017': 'K', 'M018': 'K', 'MA202': 'K',
+        'M016': 'K', 'M017': 'K', 'M018': 'K',
         #Kitchen window
         'M051': 'K',
 
@@ -137,7 +141,8 @@ class Locations(object):
         'M019': 'KH',
 
         #Hallway
-        'M023': 'H', 'M022': 'H', 'M024': 'H', 'M025': 'H',
+        'M023': 'H', 'M021': 'H',
+        'M022': 'H', 'M024': 'H', 'M025': 'H',
         'M060': 'H', 'M059': 'H', 'M058': 'H', 'M057': 'H', 'M056': 'H',
-        'M055': 'H', 'M054': 'H', 'MA203': 'H',
+        'M055': 'H', 'M054': 'H'
     }
