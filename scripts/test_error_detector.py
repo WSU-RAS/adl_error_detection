@@ -41,18 +41,28 @@ class TestErrorDetector:
             agent_name=rospy.get_name(),
             amqp_user=default['AmqpUser'],
             amqp_pass=default['AmqpPass'],
-            amqp_host=default['AmqpHost'],
+            amqp_host=default['AmqpHostDev'],
             amqp_port=default['AmqpPort'],
             amqp_vhost=default['AmqpVHost'],
             amqp_ssl=default.getboolean('AmqpSSL'),
             translations=self.translate)
         self.rcon.l.addHandler(ConnectPythonLoggingToRos())
         self.rcon.set_on_connect_callback(self.casas_on_connect)
+        self.rcon.set_on_disconnect_callback(self.casas_on_disconnect)
 
         self.ros_setup()
 
     def casas_on_connect(self):
-        self.rcon.call_later(1, self.casas_publish_event)
+        self.pause = False
+        if self.thread is None or not self.thread.isAlive():
+            self.thread = threading.Thread(target=self.casas_publish_event)
+            self.thread.daemon = True
+            self.thread.start()
+        rospy.loginfo("Connected to CASAS")
+
+    def casas_on_disconnect(self):
+        self.pause = True
+        rospy.logerr("Disconnected from CASAS")
 
     def ros_setup(self):
         # start task rosservice server
