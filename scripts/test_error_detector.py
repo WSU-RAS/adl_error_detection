@@ -145,6 +145,7 @@ class TestErrorDetector:
                     self.task_status.text = "ACTIVE"
                     rospy.loginfo("{}: START".format(Task.types[self.task_number]))
                     return TestTaskControllerResponse(response)
+
             elif self.task_number == request.id.task_number \
                and request.request.status == TaskStatus.END \
                and self.task_status.status == TaskStatus.ACTIVE:

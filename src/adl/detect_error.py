@@ -265,6 +265,7 @@ if __name__ == '__main__':
         WaterPlantsDag.task_start,
         seq=['W', 'S', 'P2', 'P3', 'S'],
         num_tasks=WaterPlantsDag.num_tasks))
+
     print(check_sequence(
         WaterPlantsDag.task_start,
         seq=['W', 'S', 'P2', 'P3', 'S', 'W'],

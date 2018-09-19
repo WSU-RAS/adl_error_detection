@@ -134,6 +134,7 @@ class Locations(object):
 
         #Kitchen
         'M016': 'K', 'M017': 'K', 'M018': 'K',
+
         #Kitchen window
         'M051': 'K',
 
