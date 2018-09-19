@@ -1,1 +1,1 @@
-from detect_error import check_sequence
+from detect_error import check_sequence, check_sequence_gen, check_sequence_wloc_gen
