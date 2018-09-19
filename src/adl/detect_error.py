@@ -1,101 +1,220 @@
 #!/usr/bin/env python
 
+from collections import deque
 from util import WaterPlantsDag, WalkDogDag, TakeMedicationDag
 from util import Items
 
 
-def check_sequence(graph, seq=[], task_count=0, task_num=-1):
+def check_sequence(graph, seq=[], task_step_num=0, num_tasks=-1, loc=[]):
+    """
+    Checks for error in a sequence based on directed acyclic graph, returning
+    five values: what step in the task, is current task step completed,
+    name of the current step in the task, is next task step completed, and
+    name of the next step in the task.
+
+    :param Dag graph: Directed acyclic graph of the start task step
+    :param list seq: Sequence of triggered sensors
+    :param int task_step_num: Start task step
+    :param int num_tasks: Total number of steps in tasks (subtasks)
+    :param list loc: Location for each triggered sensor
+    :rtype: int, bool, str, bool, str
+    """
     if seq == []:
-        return 0, False, graph['current'], False, graph['current']
+        return task_step_num, False, graph['current'], False, "ERROR sequence empty"
+    if num_tasks == -1:
+        return task_step_num, False, graph['current'], False, "ERROR num_tasks not provided"
 
-    if task_num > 0:
-        return _check_sequence(graph, seq, task_count, task_num-1, current=graph['current'])
+    if loc == []:
+        return _check_sequence(graph, seq, task_step_num, num_tasks-1, current=graph['current'])
+    return _check_sequence_wloc(graph, seq, task_step_num, num_tasks-1, current=graph['current'], loc=loc)
 
-    # Y intersection, pick a branch
-    if 'Y' in graph:
-        long_path = None
-        for branch in graph['Y']:
-            if seq[0] in branch:
-                path = _check_sequence(branch, seq, task_count, task_num-1, current=branch['current'])
-                if long_path is None:
-                    long_path = path
-                    continue
-                if path[0] > long_path[0]:
-                    long_path = path
-                if path[1] and not long_path[1]:
-                    long_path = path
-        return long_path
+# def _check_sequence_wloc(graph, seq=[], task_step_num=0, num_tasks=-1, current=None, loc=[]):
+#     """
+#     Use recursion to check sequence using estimotes + ambient sensors (with location)
+#     """
+#     # check if first sensor is allowed
+#     if seq[0] not in graph['allow'] and (seq[0], loc[0]) not in graph['allow']:
+#         return task_step_num, False, graph['current'], False, graph['current']
+#
+#     # check if task has been completed
+#     if task_step_num == num_tasks and (seq[0] in graph['Done'] or (seq[0], loc[0]) in graph['Done']):
+#         return task_step_num, True, graph['current'], True, graph['next']
+#
+#     # estimote sensor including change-location (FIFO)
+#     result = graph.get(seq[0])
+#     # estimote sensor including change-location plus location (FIFO)
+#     result_wloc = graph.get((seq[0], loc[0]))
+#
+#     # check if we have reach end of sequence and is current step completed
+#     if len(seq) == 1:
+#         if type(result) is dict or type(result_wloc) is dict:
+#             return task_step_num, True, graph['current'], False, graph['next']
+#         if task_step_num > 0:
+#             task_step_num -= 1
+#         return task_step_num, True, current, False, graph['current']
+#
+#     # at this point, we assume we have not reached end of sequence
+#     # go through the rest of the sequence and if any of the conditions are true,
+#     # we use the next step's graph as the starting point
+#     if type(result_wloc) is dict:
+#         return _check_sequence_wloc(result_wloc, seq[1:], task_step_num+1, num_tasks, graph['current'], loc[1:])
+#     elif type(result) is dict:
+#         return _check_sequence_wloc(result, seq[1:], task_step_num+1, num_tasks, graph['current'], loc[1:])
+#
+#     # catch-all, when first sensor in sequence is allowed but does not complete
+#     # the step, we continue to check the next sensor in the sequence
+#     return _check_sequence_wloc(graph, seq[1:], task_step_num, num_tasks, current, loc[1:])
 
-    if seq[0] not in graph:
-        return 0, False, graph['current'], False, graph['current']
+def _check_sequence_wloc(graph, seq=[], task_step_num=0, num_tasks=-1, current=None, loc=[]):
+    """
+    Check sequence using estimotes + ambient sensors (with location)
+    """
+    sequence = deque(seq)
+    location = deque(loc)
+    while len(sequence) > 0:
+        estimote = sequence.popleft()
+        ambient_sensor = location.popleft()
 
-    if len(seq) == 1:
-        return 0, True, graph['current'], False, graph['next']
+        # check if first estimote or (estimote, ambient) is allowed
+        if estimote not in graph['allow'] and (estimote, ambient_sensor) not in graph['allow']:
+            return task_step_num, False, graph['current'], False, graph['current']
 
-    return _check_sequence(graph[seq[0]], seq, task_count+1, task_num-1, current=graph['current'])
+        # check if task has been completed
+        if task_step_num == num_tasks and \
+          (estimote in graph['Done'] or (estimote, ambient_sensor) in graph['Done']):
+            return task_step_num, True, graph['current'], True, graph['next']
 
-def _check_sequence(graph, seq=[], task_count=0, task_num=-1, current=None):
-    # Y intersection, pick a branch
-    if 'Y' in graph:
-        long_path = None
-        for branch in graph['Y']:
-            if seq[0] in branch:
-                path = _check_sequence(branch, seq, task_count, task_num, current=branch['current'])
-                if path[1] and path[3]: # Completed
-                    return path
-                if long_path is None:
-                    long_path = path
-                    continue
-                if path[0] > long_path[0]:
-                    long_path = path
-                if path[1] and not long_path[1]:
-                    long_path = path
-        return long_path
+        # estimote sensor including change-location (FIFO)
+        result = graph.get(estimote)
+        # estimote sensor including change-location plus location (FIFO)
+        result_wloc = graph.get((estimote, ambient_sensor))
 
-    if seq[0] not in graph:
-        return task_count, False, graph['current'], False, graph['current']
+        # check if we have reach end of sequence and is current step completed
+        if len(sequence) == 0:
+            if type(result) is dict or type(result_wloc) is dict:
+                return task_step_num, True, graph['current'], False, graph['next']
+            if task_step_num > 0:
+                task_step_num -= 1
+            return task_step_num, True, current, False, graph['current']
 
-    if task_count == task_num and seq[0] == graph['Done']:
-        return task_count, True, graph['current'], True, graph['next']
+        # at this point, we assume we have not reached end of sequence
+        # go through the rest of the sequence and if any of the conditions are true,
+        # we use the next step's graph as the starting point
+        if type(result_wloc) is dict:
+            current = graph['current']
+            graph = result_wloc
+            task_step_num += 1
+            # return _check_sequence_wloc(result_wloc, seq[1:], task_step_num+1, num_tasks, graph['current'], loc[1:])
+        elif type(result) is dict:
+            current = graph['current']
+            graph = result
+            task_step_num += 1
+            # return _check_sequence_wloc(result, seq[1:], task_step_num+1, num_tasks, graph['current'], loc[1:])
 
-    if len(seq) == 1:
-        if type(graph[seq[0]]) is dict:
-            return task_count, True, graph['current'], False, graph['next']
-        return task_count-1, True, current, False, graph['current']
+        # catch-all, when first sensor in sequence is allowed but does not complete
+        # the step, we continue to check the next sensor in the sequence
+        # return _check_sequence_wloc(graph, seq[1:], task_step_num, num_tasks, current, loc[1:])
 
-    if type(graph[seq[0]]) is dict:
-        return _check_sequence(graph[seq[0]], seq[1:], task_count+1, task_num, graph['current'])
 
-    return _check_sequence(graph, seq[1:], task_count, task_num, current)
+# def _check_sequence(graph, seq=[], task_step_num=0, num_tasks=-1, current=None):
+#     """
+#     Use recursion to check sequence using estimotes only
+#     """
+#     # check if first sensor is allowed
+#     if seq[0] not in graph['allow']:
+#         return task_step_num, False, graph['current'], False, graph['current']
+#
+#     # check if task has been completed
+#     if task_step_num == num_tasks and seq[0] in graph['Done']:
+#         return task_step_num, True, graph['current'], True, graph['next']
+#
+#     # estimote sensor (FIFO)
+#     result = graph.get(seq[0])
+#
+#     # check if we have reach end of sequence and is current step completed
+#     if len(seq) == 1:
+#         if type(result) is dict:
+#             return task_step_num, True, graph['current'], False, graph['next']
+#         if task_step_num > 0:
+#             task_step_num -= 1
+#         return task_step_num, True, current, False, graph['current']
+#
+#     # at this point, we assume we have not reached end of sequence
+#     # go through the rest of the sequence and if any of the conditions are true,
+#     # we use the next step's graph as the starting point
+#     if type(result) is dict:
+#         return _check_sequence(result, seq[1:], task_step_num+1, num_tasks, graph['current'])
+#
+#     # catch-all, when first sensor in sequence is allowed but does not complete
+#     # the step, we continue to check the next sensor in the sequence
+#     return _check_sequence(graph, seq[1:], task_step_num, num_tasks, current)
 
+def _check_sequence(graph, seq=[], task_step_num=0, num_tasks=-1, current=None):
+    """
+    Check sequence using estimotes only
+    """
+    sequence = deque(seq)
+    while len(sequence) > 0:
+        estimote = sequence.popleft()
+
+        # check if estimote is allowed
+        if estimote not in graph['allow']:
+            return task_step_num, False, graph['current'], False, graph['current']
+
+        # check if task has been completed
+        if task_step_num == num_tasks and estimote in graph['Done']:
+            return task_step_num, True, graph['current'], True, graph['next']
+
+        # estimote sensor (FIFO)
+        result = graph.get(estimote)
+
+        # check if we have reach end of sequence and is current step completed
+        if len(sequence) == 0:
+            if type(result) is dict:
+                return task_step_num, True, graph['current'], False, graph['next']
+            if task_step_num > 0:
+                task_step_num -= 1
+            return task_step_num, True, current, False, graph['current']
+
+        # at this point, we assume we have not reached end of sequence
+        # go through the rest of the sequence and if any of the conditions are true,
+        # we use the next step's graph as the starting point
+        if type(result) is dict:
+            current = graph['current']
+            graph = result
+            task_step_num += 1
+            #return _check_sequence(result, seq[1:], task_step_num+1, num_tasks, graph['current'])
+
+        # catch-all, when first estimote in sequence is allowed but does not complete
+        # the step, we continue to check the next estimote in the sequence
+        # return _check_sequence(graph, seq[1:], task_step_num, num_tasks, current)
 
 
 if __name__ == '__main__':
-
     print(check_sequence(
         WaterPlantsDag.water_plantcoffee,
         seq=['W','W','W'],
-        task_count=2,
-        task_num=WaterPlantsDag.num_tasks))
+        task_step_num=2,
+        num_tasks=WaterPlantsDag.num_tasks))
 
     print(check_sequence(
         WaterPlantsDag.task_start,
         seq=['W', 'S', 'P2', 'P3', 'S'],
-        task_num=WaterPlantsDag.num_tasks))
+        num_tasks=WaterPlantsDag.num_tasks))
     print(check_sequence(
         WaterPlantsDag.task_start,
         seq=['W', 'S', 'P2', 'P3', 'S', 'W'],
-        task_num=WaterPlantsDag.num_tasks))
+        num_tasks=WaterPlantsDag.num_tasks))
 
     print(check_sequence(
         WalkDogDag.task_start,
         seq=['U', 'U', 'U'],
-        task_num=WalkDogDag.num_tasks))
+        num_tasks=WalkDogDag.num_tasks))
 
     print(check_sequence(
         WalkDogDag.task_start,
         seq=['U', 'L', 'K', 'D', 'DR'],
-        task_num=WalkDogDag.num_tasks))
+        num_tasks=WalkDogDag.num_tasks))
 
     print(check_sequence(
         TakeMedicationDag.task_start,
@@ -105,4 +224,4 @@ if __name__ == '__main__':
              'CH', 'C', 'CH', 'M', 'F', 'C', 'C', 'M', 'F', 'M',
              'F', 'M', 'C', 'F', 'F', 'S', 'C', 'C', 'F', 'M',
              'M', 'F', 'C', 'M', 'C', 'C', 'G', 'M', 'G', 'M'],
-        task_num=TakeMedicationDag.num_tasks))
+        num_tasks=TakeMedicationDag.num_tasks))
