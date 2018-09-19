@@ -11,7 +11,6 @@ L   leash
 K   keys
 D   dog
 DR  door
-PL  pills
 
 Location Change:
 L>K living_room to kitchen
@@ -21,43 +20,41 @@ H>KH hallway to kitchen_hallway
 KH>H kitchen_hallway to kitchen
 '''
 
+
 class WaterPlantsDag(object):
 
     return_can = {
-        'S': None,
-        'W': None,
-        'Done': 'W',
+        'allow': ['S', 'W'],
+        'Done': ['W'],
         'current': 'return_can',
         'next': 'Done'
     }
     rinse_can = {
-        'P3': None,
-        'W': None,
+        'allow': ['S', 'P3', 'P2', 'W'],
         'S': return_can,
         'current': 'rinse_can',
         'next': 'return_can'
     }
     water_plantside = {
-        'P2': None,
-        'W': None,
+        'allow': ['P3', 'P2', 'W'],
         'P3': rinse_can,
         'current': 'water_plantside',
         'next': 'rinse_can'
     }
     water_plantcoffee = {
-        'S': None,
-        'W': None,
+        'allow': ['P2', 'S', 'W'],
         'P2': water_plantside,
         'current': 'water_plantcoffee',
         'next': 'water_plantside'
     }
     fill_can = {
-        'W': None,
+        'allow': ['S', 'W'],
         'S': water_plantcoffee,
         'current': 'fill_can',
         'next': 'water_plantcoffee'
     }
     get_can = {
+        'allow': ['W'],
         'W': fill_can,
         'current': 'get_can',
         'next': 'fill_can'
@@ -91,44 +88,37 @@ class WaterPlantsDag(object):
 class WaterPlantsWithLocationDag(object):
 
     return_can = {
-        'S': None,
-        'W': None,
-        'K>L': None,
-        'Done': 'K>L',
+        'allow': ['LD>L', ('W', 'L'), 'S', 'W', 'L>LD', 'K>LD', 'LD>K'],
+        'Done': ['LD>L', ('W', 'L')],
         'current': 'return_can',
         'next': 'Done'
     }
     rinse_can = {
-        'P3': None,
-        'W': None,
-        'L>K': None,
+        'allow': ['S', 'P3', 'P2', 'W', 'LD>K', 'K>LD', 'LD>L', 'L>LD'],
         'S': return_can,
         'current': 'rinse_can',
         'next': 'return_can'
     }
     water_plantside = {
-        'P2': None,
-        'W': None,
+        'allow': ['P3', 'P2', 'W', 'L>LD', 'LD>L'],
         'P3': rinse_can,
         'current': 'water_plantside',
         'next': 'rinse_can'
     }
     water_plantcoffee = {
-        'S': None,
-        'W': None,
-        'K>L': None,
+        'allow': ['P2', 'S', 'W', 'K>LD', 'LD>K', 'LD>L', 'L>LD'],
         'P2': water_plantside,
         'current': 'water_plantcoffee',
         'next': 'water_plantside'
     }
     fill_can = {
-        'W': None,
-        'L>K': None,
+        'allow': ['S', 'LD>L', 'L>LD', 'LD>K', 'K>LD', 'W'],
         'S': water_plantcoffee,
         'current': 'fill_can',
         'next': 'water_plantcoffee'
     }
     get_can = {
+        'allow': ['W', 'L>LD', 'LD>L'],
         'W': fill_can,
         'current': 'get_can',
         'next': 'fill_can'
@@ -163,37 +153,31 @@ class WaterPlantsWithLocationDag(object):
 class WalkDogDag(object):
 
     exit_house = {
-        'U': None,
-        'L': None,
-        'K': None,
-        'D': None,
-        'DR': None,
-        'Done': 'DR',
+        'allow': ['DR', 'U', 'L', 'K', 'D'],
+        'Done': ['DR'],
         'current': 'exit_house',
         'next': 'Done'
     }
     leash_dog = {
-        'U': None,
-        'L': None,
-        'K': None,
+        'allow': ['D', 'U', 'L', 'K'],
         'D': exit_house,
         'current': 'leash_dog',
         'next': 'exit_house'
     }
     get_keys = {
-        'U': None,
-        'L': None,
+        'allow': ['K', 'U', 'L'],
         'K': leash_dog,
         'current': 'get_keys',
         'next': 'leash_dog'
     }
     get_leash = {
-        'U': None,
+        'allow': ['L', 'U'],
         'L': get_keys,
         'current': 'get_leash',
         'next': 'get_keys'
     }
     get_umbrella = {
+        'allow': ['U'],
         'U': get_leash,
         'current': 'get_umbrella',
         'next': 'get_leash'
@@ -223,42 +207,31 @@ class WalkDogDag(object):
 class WalkDogWithLocationDag(object):
 
     exit_house = {
-        'U': None,
-        'L': None,
-        'K': None,
-        'D': None,
-        'DR': None,
-        'Done': 'DR',
+        'allow': ['DR', 'U', 'L', 'K', 'H>KH', 'KH>H', 'D'],
+        'Done': ['DR'],
         'current': 'exit_house',
         'next': 'Done'
     }
     leash_dog = {
-        'U': None,
-        'L': None,
-        'K': None,
-        'H>KH': None,
-        'KH>H': None,
+        'allow': ['D', 'U', 'L', 'K', 'H>KH', 'KH>H'],
         'D': exit_house,
         'current': 'leash_dog',
         'next': 'exit_house'
     }
     get_keys = {
-        'U': None,
-        'L': None,
-        'KH>H': None,
-        'H>KH': None,
+        'allow': ['K', 'U', 'L', 'KH>H', 'H>KH'],
         'K': leash_dog,
         'current': 'get_keys',
         'next': 'leash_dog'
     }
     get_leash = {
-        'U': None,
+        'allow': ['L', 'U'],
         'L': get_keys,
         'current': 'get_leash',
         'next': 'get_keys'
     }
     get_umbrella = {
-        'L>H': None,
+        'allow': ['U', 'L>H', 'LD>H', 'H>LD', 'L>LD', 'LD>L'],
         'U': get_leash,
         'current': 'get_umbrella',
         'next': 'get_leash'
@@ -288,82 +261,67 @@ class WalkDogWithLocationDag(object):
 class TakeMedicationDag(object):
 
     throw_garbage = {
-        'S': None,
-        'F': None,
-        'C': None,
-        'G': None,
-        'Done': 'G',
+        'allow': ['G', 'S', 'C', 'F'],
+        'Done': ['G'],
         'current': 'throw_garbage',
         'next': 'Done'
     }
     rinse_cup = {
-        'CH': None,
-        'M': None,
-        'F': None,
-        'C': None,
+        'allow': ['S', 'CH', 'C', 'M', 'F'],
         'S': throw_garbage,
         'current': 'rinse_cup',
         'next': 'throw_garbage'
     }
     stand_up = {
-        'F': None,
-        'M': None,
-        'C': None,
+        'allow': ['CH', 'C', 'M', 'F'],
         'CH': rinse_cup,
         'current': 'stand_up',
         'next': 'rinse_cup'
     }
     drink_water = {
-        'F': None,
-        'M': None,
+        'allow': ['C', 'M', 'F'],
         'C': stand_up,
         'current': 'drink_water',
         'next': 'stand_up'
     }
     take_med = {
-        'F': None,
-        'PL': None,
+        'allow': ['M', 'F'],
         'M': drink_water,
         'current': 'take_med',
         'next': 'drink_water'
     }
     eat_food = {
-        'C': None,
-        'CH': None,
+        'allow': ['F', 'C', 'CH'],
         'F': take_med,
         'current': 'eat_food',
         'next': 'take_med'
     }
     sit_chair = {
-        'M': None,
-        'C': None,
-        'F': None,
+        'allow': ['CH', 'M', 'C', 'F'],
         'CH': eat_food,
         'current': 'sit_chair',
         'next': 'eat_food'
     }
     get_med = {
-        'F': None,
-        'C': None,
-        'S': None,
+        'allow': ['M', 'S', 'C', 'F'],
         'M': sit_chair,
         'current': 'get_med',
         'next': 'sit_chair'
     }
     fill_cup = {
-        'F': None,
-        'C': None,
+        'allow': ['S', 'C', 'F'],
         'S': get_med,
         'current': 'fill_cup',
         'next': 'get_med'
     }
     get_cup = {
-        'F': None,
+        'allow': ['C', 'F'],
         'C': fill_cup,
         'current': 'get_cup',
         'next': 'fill_cup'
     }
     get_food = {
+        'allow': ['F'],
         'F': get_cup,
         'current': 'get_food',
         'next': 'get_cup'
@@ -405,99 +363,85 @@ class TakeMedicationDag(object):
 class TakeMedicationWithLocationDag(object):
 
     throw_garbage = {
-        'S': None,
-        'F': None,
-        'C': None,
-        'G': None,
-        'Done': 'G',
+        'allow': ['G', 'C', 'F', 'S'],
+        'Done': ['G'],
         'current': 'throw_garbage',
         'next': 'Done'
     }
     rinse_cup = {
-        'CH': None,
-        'M': None,
-        'F': None,
-        'C': None,
-        'L>K': None,
+        'allow': ['S', 'CH', 'M', 'F', 'C', 'LD>K'],
         'S': throw_garbage,
         'current': 'rinse_cup',
         'next': 'throw_garbage'
     }
     stand_up = {
-        'F': None,
-        'M': None,
-        'C': None,
+        'allow': ['CH', 'F', 'M', 'C', 'LD>K'],
+        'LD>K': rinse_cup,
         'CH': rinse_cup,
         'current': 'stand_up',
         'next': 'rinse_cup'
     }
     drink_water = {
-        'F': None,
-        'M': None,
-        'C': stand_up,
+        'allow': [('C', 'LD'), 'F', 'M'],
+        ('C', 'LD'): stand_up,
         'current': 'drink_water',
         'next': 'stand_up'
     }
     take_med = {
-        'F': None,
-        #'C': None,
-        'M': drink_water,
+        'allow': [('M', 'LD'), 'F'],
+        ('M', 'LD'): drink_water,
         'current': 'take_med',
         'next': 'drink_water'
     }
     eat_food = {
-        'C': None,
-        'CH': None,
-        'F': take_med,
+        'allow': [('F', 'LD'), 'C', 'CH'],
+        ('F', 'LD'): take_med,
         'current': 'eat_food',
         'next': 'take_med'
     }
     sit_chair = {
-        'M': None,
-        'C': None,
-        'F': None,
+        'allow': ['CH', 'M', 'C', 'F', 'CH'],
         'CH': eat_food,
         'current': 'sit_chair',
         'next': 'eat_food'
     }
     put_med = {
-        'M': None,
-        'K>L': sit_chair,
+        'allow': ['K>LD', ('M', 'LD'), 'M', 'C', 'F'],
+        'K>LD': sit_chair,
+        ('M','LD'): sit_chair,
         'current': 'put_med',
         'next': 'sit_chair'
     }
     get_med = {
-        'F': None,
-        'C': None,
-        'L>K': None,
-        'M': put_med,
+        'allow': [('M', 'K'), ('M', 'LD'), 'F', 'C', 'LD>K', 'K>LD'],
+        ('M', 'K'): put_med,
+        ('M', 'LD'): sit_chair,
         'current': 'get_med',
         'next': 'put_med'
     }
     put_food_cup = {
-        'F': None,
-        'C': None,
-        'S': None,
-        'K>L': get_med,
+        'allow': ['K>LD', 'LD>K', 'F', 'C', 'S', ('F', 'LD'), ('C', 'LD')],
+        'K>LD': get_med,
+        ('F', 'LD'): get_med,
+        ('C', 'LD'): get_med,
         'current': 'put_food_cup',
         'next': 'get_med'
     }
     fill_cup = {
-        'F': None,
-        'C': None,
+        'allow': ['S', 'F', 'C'],
         'S': put_food_cup,
         'current': 'fill_cup',
         'next': 'put_food_cup'
     }
     get_cup = {
-        'F': None,
-        'C': fill_cup,
+        'allow': [('C', 'K'), 'F'],
+        ('C', 'K'): fill_cup,
         'current': 'get_cup',
         'next': 'fill_cup'
     }
     get_food = {
-        'L>K': None,
-        'F': get_cup,
+        'allow': [('F', 'K'), 'L>LD', 'LD>L', 'L>K', 'LD>K', 'K>LD'],
+        ('F', 'K'): get_cup,
         'current': 'get_food',
         'next': 'get_cup'
     }
@@ -526,11 +470,11 @@ class TakeMedicationWithLocationDag(object):
         1:  ('Retrieve cup'         , 'glass'     , 'C'  , get_cup      , fill_cup),
         2:  ('Fill cup'             , 'sink'      , 'S'  , fill_cup     , put_food_cup),
         3:  ('Put food/cup on table', None        , 'K>L', put_food_cup , put_med),
-        4:  ('Retrieve medication'  , 'pillbottle', 'M'  , get_med      , put_med),
-        5:  ('Put med on table'     , None        , 'K>L', put_med      , sit_chair),
+        4:  ('Retrieve medication'  , 'pillbottle', 'M'  , get_med      , eat_food),
+        5:  ('Put med on table'     , None        , 'K>L', put_med      , eat_food),
         6:  ('Sit chair'            , None        , 'CH' , sit_chair    , take_med),
         7:  ('Eat food'             , None        , 'F'  , eat_food     , drink_water),
-        8:  ('Take medication'      , 'pills'     , 'M'  , take_med     , stand_up),
+        8:  ('Take medication'      , 'pills'     , 'PL'  , take_med     , stand_up),
         9:  ('Drink water'          , None        , 'C'  , drink_water  , rinse_cup),
         10: ('Stand up'             , None        , 'CH' , stand_up     , throw_garbage),
         11: ('Rinse cup'            , 'sink'      , 'C'  , rinse_cup    , None),
