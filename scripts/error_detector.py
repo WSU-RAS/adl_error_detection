@@ -64,7 +64,7 @@ class ErrorDetector:
             agent_name=rospy.get_name(),
             amqp_user=default['AmqpUser'],
             amqp_pass=default['AmqpPass'],
-            amqp_host=default['AmqpHost'],
+            amqp_host=default['AmqpHost'] if not self.test_error else default['AmqpHostDev'],
             amqp_port=default['AmqpPort'],
             amqp_vhost=default['AmqpVHost'],
             amqp_ssl=default.getboolean('AmqpSSL'),
