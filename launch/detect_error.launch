@@ -13,5 +13,5 @@
     <param name="adl/plot_robotxy" value="$(arg plot_robotxy)" type="bool" />
 
     <!-- Error Detection -->
-    <node name="error_detector" pkg="adl_error_detection" type="error_detector.py" output="screen" />
+    <node name="error_detector" pkg="adl_error_detection" type="error_detector.py" output="screen" args="$(arg is_test)"/>
 </launch>
