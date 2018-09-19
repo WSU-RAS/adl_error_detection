@@ -69,11 +69,13 @@ Run this launch file to view the logs sent to CASAS.
 roslaunch adl_error_detection casas_log_observer.launch
 ```
 
-### View Transformed Robot's SLAM Location into Kyoto map
+#### View Transformed Robot's SLAM Location into Kyoto map
 Run this node to view the transformed robot location plot
 ```
 rosrun adl_error_detection view_robot_in_map.py
 ```
+
+---
 
 ## Offline Testing of Error Detection Module
 This allow us to use previously collected participant data and simulate the experiment through the experiment's CASAS logged data.
