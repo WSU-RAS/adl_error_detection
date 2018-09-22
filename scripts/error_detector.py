@@ -70,7 +70,7 @@ class ErrorDetector:
             agent_name=rospy.get_name(),
             amqp_user=default['AmqpUser'],
             amqp_pass=default['AmqpPass'],
-            amqp_host=default['AmqpHost'] if not self.test_error else default['AmqpHostDev'],
+            amqp_host=default['AmqpHostDev'] if self.test_error or self.test else default['AmqpHost'],
             amqp_port=default['AmqpPort'],
             amqp_vhost=default['AmqpVHost'],
             amqp_ssl=default.getboolean('AmqpSSL'),
@@ -84,7 +84,7 @@ class ErrorDetector:
         # CASAS Logging
         self.casas = PublishToCasas(
             agent_num='1', node='ROS_Node_'+rospy.get_name()[1:],
-            test=self.test) # use the test agent instead of kyoto if true
+            test=self.test or self.test_error) # use the test agent instead of kyoto if true
         try:
             self.casas.connect()
         finally:
@@ -208,7 +208,7 @@ class ErrorDetector:
                 category='state'
             )
         else:
-            rospy.loginfo("error_detector: do_error preempted or cancelled")
+            rospy.logwarn("error_detector: do_error preempted or cancelled")
 
         self.task_pause = False
 
@@ -247,6 +247,7 @@ class ErrorDetector:
                     task_num=request.id.task_number,
                     status=TaskStatus.ACTIVE,
                     text="ACTIVE")
+                self.last_task_number = request.id.task_number
                 self.current_location = 'L'
                 rospy.loginfo("error_detector: {}=START".format(Task.types[self.task_number]))
                 self.casas.publish(
@@ -342,6 +343,7 @@ class ErrorDetector:
                     self.sensors.append(('{}>{}'.format(self.current_location, new_loc), ''))
                     is_added = True
                 self.current_location = new_loc
+                rospy.loginfo("{}current location: {}{}".format(bcolors.WARNING, Locations.encode[self.current_location][1], bcolors.ENDC))
         #Estimotes + Door sensors
         elif is_estimote or is_door_closed:
             code = Items.decode[sensor.target]
@@ -375,8 +377,6 @@ class ErrorDetector:
                 result = self.detect_error_gen.send(new_sequence)
 
         rospy.logdebug("error_detector: {}".format(result))
-        if not result[3]:
-            rospy.loginfo("{}next step: {}{}".format(bcolors.OKBLUE, result[4], bcolors.ENDC))
         return result
 
     def __error_detection(self):
@@ -387,9 +387,7 @@ class ErrorDetector:
 
             # Concatenate new sensor readings into task sequence
             self.task_sequence.append((new_seq, new_loc))
-            #self.task_locations.append(new_loc)
             if self.test:
-                #rospy.logdebug("loc :{}".format("-".join(self.task_locations)))
                 rospy.logdebug("seq :{}".format("-".join(map(str, self.task_sequence))))
 
             # Error Detected
@@ -428,8 +426,9 @@ class ErrorDetector:
                         category='state'
                     )
                     rospy.loginfo('{}{} Task --- step {}: {} completed{}'.format(bcolors.OKGREEN, Task.types[self.task_number], self.current_step, check_result[2], bcolors.ENDC))
+                    rospy.loginfo("{}next step: {}{}".format(bcolors.OKBLUE, check_result[4], bcolors.ENDC))
                     # NEW: exclude completed sequence
-                    self.task_dag = TaskToDag.mapping[self.task_number][1 if self.use_location else 0].subtask_info[self.current_step+1][3]
+                    self.task_dag = TaskToDag.mapping[self.last_task_number if self.task_number < 0 else self.task_number][1 if self.use_location else 0].subtask_info[self.current_step+1][3]
                     self.task_sequence = []
                     self.task_locations = []
                     self.last_key = check_result[2]
@@ -438,15 +437,19 @@ class ErrorDetector:
         while not rospy.is_shutdown():
             try:
                 if len(self.all_sensors) > 0:
-                    sensor = self.all_sensors.popleft()
-                    if self.task_pause:
+                    sensor, pause = self.all_sensors.popleft()
+                    #if self.task_pause:
+                    if pause:
                         # While pause, still update location
                         is_ambient_sensor = sensor.target[0] == 'M' and sensor.message == 'ON'
                         if is_ambient_sensor and sensor.target in Locations.decode.keys():
                             if not self.__is_exclude(self.task_number, sensor.target):
                                 self.current_location = Locations.decode[sensor.target]
-                    if self.task_status.status == TaskStatus.ACTIVE and not self.task_pause:
+                                rospy.loginfo("{}current location: {}{}".format(bcolors.WARNING, Locations.encode[self.current_location][1], bcolors.ENDC))
+
+                    elif self.task_status.status == TaskStatus.ACTIVE and not pause: #not self.task_pause:
                         if self.__add_sensor_to_sequence(sensor, self.current_location):
+                            # Only check for error if sensor was added to the sequence
                             self.__error_detection()
 
                     if sensor.target == 'ROS_XYR':
@@ -463,7 +466,7 @@ class ErrorDetector:
                         if self.plot_robot_location:
                             self.rviz.add_point(x, y)
 
-                    if sensor.target == 'ROS_Task':
+                    elif sensor.target == 'ROS_Task':
                         msg = yaml.load(sensor.message)
                         if msg['action'] == 'END':
                             state = RobotToMapTransformState()
@@ -485,17 +488,22 @@ class ErrorDetector:
                                 # self.pause_dummy_data(False)
                                 self.task_pause = False
 
-            except KeyError, e:
-                rospy.logerr("KeyError possibly due to thread race - reason {}".format(e))
+            # except KeyError, e:
+            #     rospy.logerr("KeyError possibly due to thread race - reason {}".format(e))
 
             except KeyboardInterrupt:
                 break
 
     def __casas_cb(self, sensors):
         for sensor in sensors:
-            self.all_sensors.append(sensor)
+            self.all_sensors.append((sensor, self.task_pause))
             sensor_str = "{}\t{}\t{}".format(
                 str(sensor.stamp), str(sensor.target), str(sensor.message))
+            if self.test_error:
+                if sensor.target == 'ROS_Task_Step':
+                    sensor_str = '{}{}{}{}'.format(bcolors.BOLD,bcolors.OKGREEN, sensor_str, bcolors.ENDC)
+                elif sensor.target == 'ROS_Task_Step_Fix_Error':
+                    sensor_str = '{}{}{}{}'.format(bcolors.BOLD,bcolors.WARNING, sensor_str, bcolors.ENDC)
             rospy.loginfo(sensor_str)
 
     def casas_run(self):
