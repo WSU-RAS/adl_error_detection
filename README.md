@@ -93,7 +93,14 @@ rosrun adl_error_detection test_error_detector.py 1.0
 ```
 
 #### Define Task and Participant Log File
-Run rosservice call to specify task number and file. `task_number: 2` here means walking the dog task, while `status: 2` is a request to start task. All dummy data file requires a full path and its file name. (Task Numbers: Water Plants(0), Take Medication with Food (1), Walk Dog(2))
+Run rosservice call to specify task number and file. All participant's log file requires a full path and its file name.
 ```
-rosservice call /test_task_controller '{id: {stamp: now, task_number: 2}, request: {status: 2}, file: <full_path_to_file>}'
+rosservice call /test_task_controller '{request: {status: 2}, file: <full_path_to_file>}'
+```
+
+The participant's log file should already include the ROS logs that define that start and end of the experiment. They should look like the lines below. Such lines in the log is how the simulator knows when to start and end the error detection module. It also defines what task is being completed.
+```
+2018-06-18 16:35:27.738515	ROS_Task	{'action': 'BEGIN', 'task': 'Walk_Dog'}
+...
+2018-06-18 16:37:26.865256	ROS_Task	{'action': 'END', 'task': 'Walk_Dog'}
 ```

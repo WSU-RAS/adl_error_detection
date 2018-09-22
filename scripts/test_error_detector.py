@@ -10,6 +10,7 @@ import uuid
 import time
 import sys
 import threading
+import yaml
 
 from collections import defaultdict, deque
 from adl.util import ConnectPythonLoggingToRos
@@ -33,6 +34,7 @@ class TestErrorDetector:
         self.speed = speed
         self.pause = False
         self.task_number = None
+        self.test_events = deque()
         self.thread = None
         self.task_status = TaskStatus(
             status=TaskStatus.PENDING,
@@ -57,6 +59,13 @@ class TestErrorDetector:
         self.rcon.set_on_disconnect_callback(self.casas_on_disconnect)
 
         self.ros_setup()
+
+    def add_exchange(self):
+        self.rcon.setup_publish_to_exchange(
+            exchange_name="test.events.testbed.casas",
+            exchange_type='topic',
+            routing_key='#',
+            exchange_durable=True)
 
     def casas_on_connect(self):
         self.pause = False
@@ -85,23 +94,30 @@ class TestErrorDetector:
             rospy.wait_for_service('task_controller', timeout=2.0)
             start = rospy.ServiceProxy('task_controller', TaskController)
             task_id = TaskId(stamp=rospy.Time.now(), task_number=task_number)
+            self.task_number = task_number
             request = TaskStatus(status=TaskStatus.START)
             response = start(task_id, request)
+            rospy.loginfo("{}: START".format(Task.types[task_number]))
         except (rospy.ServiceException, rospy.ROSException), e:
             rospy.logerr("Service call failed: {}".format(e))
 
-    def end_task(self, task_number=None):
+    def end_task(self):
+        if self.task_number == None:
+            return
+
         try:
             rospy.wait_for_service('task_controller', timeout=2.0)
             end = rospy.ServiceProxy('task_controller', TaskController)
-            task_id = TaskId(stamp=rospy.Time.now(), task_number=task_number)
+            task_id = TaskId(stamp=rospy.Time.now(), task_number=self.task_number)
             request = TaskStatus(status=TaskStatus.END)
             response = end(task_id, request)
+            rospy.loginfo("{}: END".format(Task.types[self.task_number]))
+            self.task_number = None
         except (rospy.ServiceException, rospy.ROSException), e:
             rospy.logerr("Service call failed: {}".format(e))
 
     def load_test_events(self, file_name):
-        self.test_events = deque()
+        self.test_events.clear()
         data_file = file_name
         try:
             rospy.loginfo("Loading data from {}".format(file_name))
@@ -131,31 +147,25 @@ class TestErrorDetector:
         response = TaskStatus(
             status=TaskStatus.SUCCESS,
             text='SUCCESS')
-        if request.id.task_number < Task.size:
-            if self.task_number is None \
-               and request.request.status == TaskStatus.START \
-               and self.task_status.status == TaskStatus.PENDING:
-                success = self.load_test_events(request.file)
-                if success and len(self.test_events) > 0:
-                    self.current_event = self.test_events.popleft()
-                    self.start_task(task_number=request.id.task_number)
-                    self.task_number = request.id.task_number
-                    self.pause = False
-                    self.task_status.status = TaskStatus.ACTIVE
-                    self.task_status.text = "ACTIVE"
-                    rospy.loginfo("{}: START".format(Task.types[self.task_number]))
-                    return TestTaskControllerResponse(response)
 
-            elif self.task_number == request.id.task_number \
-               and request.request.status == TaskStatus.END \
-               and self.task_status.status == TaskStatus.ACTIVE:
-                self.end_task(task_number=request.id.task_number)
-                self.task_number = None
+        if request.request.status == TaskStatus.START \
+           and self.task_status.status == TaskStatus.PENDING:
+            success = self.load_test_events(request.file)
+            if success and len(self.test_events) > 0:
+                self.current_event = self.test_events.popleft()
                 self.pause = False
-                self.task_status.status = TaskStatus.PENDING
-                self.task_status.text = "PENDING"
-                rospy.loginfo("{}: END".format(Task.types[request.id.task_number]))
+                self.task_status.status = TaskStatus.ACTIVE
+                self.task_status.text = "ACTIVE"
                 return TestTaskControllerResponse(response)
+
+        elif request.request.status == TaskStatus.END \
+           and self.task_status.status == TaskStatus.ACTIVE:
+            self.end_task()
+            self.task_number = None
+            self.pause = False
+            self.task_status.status = TaskStatus.PENDING
+            self.task_status.text = "PENDING"
+            return TestTaskControllerResponse(response)
 
         rospy.logwarn("Invalid task request")
         response.status = TaskStatus.FAILED
@@ -172,6 +182,12 @@ class TestErrorDetector:
             while self.task_status.status == TaskStatus.ACTIVE:
                 while self.pause:
                     time.sleep(.5)
+
+                msg = None
+                if self.current_event[0] == 'ROS_Task':
+                    msg = yaml.load(self.current_event[1])
+                    if msg['action'] == 'BEGIN':
+                        self.start_task(task_number=Task.str_to_num(msg['task']))
 
                 epoch = time.mktime(self.current_event[-2].timetuple()) \
                             + self.current_event[-2].microsecond * 1e-6
@@ -193,14 +209,16 @@ class TestErrorDetector:
                     casas_object=new_event)
 
                 if len(self.test_events) == 0:
-                    self.end_task(task_number=self.task_number)
+                    self.end_task()
                     rospy.loginfo("No more events in file")
-                    rospy.loginfo("{}: END".format(Task.types[self.task_number]))
                     self.task_number = None
                     self.pause = False
                     self.task_status.status = TaskStatus.PENDING
                     self.task_status.text = "PENDING"
                     break
+                elif self.current_event[0] == 'ROS_Task':
+                    if msg['action'] == 'END':
+                        self.end_task()
 
                 next_event = self.test_events.popleft()
                 pause_time = (next_event[-1] - self.current_event[-1]) * 1e-06
@@ -231,4 +249,5 @@ if __name__ == "__main__":
     else:
         ted = TestErrorDetector(speed=float(sys.argv[1]))
     ted.casas_run()
+    ted.add_exchange()
     rospy.on_shutdown(ted.stop)

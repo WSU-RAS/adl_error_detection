@@ -21,3 +21,14 @@ class Task:
         TAKE_MEDS: "Take_Medication",
         WALK_DOG: "Walk_Dog"
     }
+
+    @staticmethod
+    def str_to_num(task_str):
+        if Task.types[Task.WATER_PLANTS] == task_str:
+            return Task.WATER_PLANTS
+        elif Task.types[Task.TAKE_MEDS] == task_str:
+            return Task.TAKE_MEDS
+        elif Task.types[Task.WALK_DOG] == task_str:
+            return Task.WALK_DOG
+        else:
+            return -1
