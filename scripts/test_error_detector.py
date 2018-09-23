@@ -62,7 +62,7 @@ class TestErrorDetector:
 
     def add_exchange(self):
         self.rcon.setup_publish_to_exchange(
-            exchange_name="test.events.testbed.casas",
+            exchange_name='test.events.testbed.casas',
             exchange_type='topic',
             routing_key='#',
             exchange_durable=True)
@@ -200,13 +200,14 @@ class TestErrorDetector:
                     serial=self.mac_address,
                     by='ROS_Node_'+rospy.get_name()[1:],
                     channel='rawevents',
-                    site='test',
+                    site='off_line_simulator',
                     epoch='{:f}'.format(epoch),
                     uuid=uuid.uuid4().hex)
                 #rospy.loginfo(new_event.get_json())
                 self.rcon.publish_to_exchange(
                     exchange_name='test.events.testbed.casas',
-                    casas_object=new_event)
+                    casas_object=new_event,
+                    routing_key='#')
 
                 if len(self.test_events) == 0:
                     self.end_task()
@@ -239,7 +240,7 @@ class TestErrorDetector:
             self.task_status.status = TaskStatus.PENDING
             self.end_task()
             rospy.loginfo("{}: END".format(Task.types[self.task_number]))
-        rospy.loginfo("Disconnecting casas connection")
+        rospy.logwarn("Disconnecting casas connection")
         self.rcon.stop()
 
 if __name__ == "__main__":
@@ -248,6 +249,6 @@ if __name__ == "__main__":
         ted = TestErrorDetector(speed=1)
     else:
         ted = TestErrorDetector(speed=float(sys.argv[1]))
-    ted.casas_run()
     ted.add_exchange()
     rospy.on_shutdown(ted.stop)
+    ted.casas_run()
