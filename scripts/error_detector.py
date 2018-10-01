@@ -9,6 +9,7 @@ import yaml
 import math
 import sys
 
+from datetime import datetime
 from collections import deque
 from actionlib import SimpleActionClient
 from actionlib_msgs.msg import GoalStatus
@@ -139,14 +140,14 @@ class ErrorDetector:
         self.is_detect_error_gen_created = False
         self.detect_error_gen.close()
         self.error_key = error_status[4]
-        self.error_step = TaskToDag.mapping[self.task_number][1 if self.use_location else 0].subtask[self.error_key]
+        self.error_step = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].subtask[self.error_key]
         self.last_key = self.error_key
         rospy.logwarn("error_detector: Initiating error correction for {} at step {}".format(
             self.error_key, self.error_step))
 
         if self.do_error_connected:
             goal = DoErrorGoal()
-            goal.task_number = self.task_number
+            goal.task_number = self.current_task_number
             goal.error_step = self.error_step
             self.do_error.send_goal(
                 goal,
@@ -167,7 +168,7 @@ class ErrorDetector:
             target='ROS_Task_Step_Fix_Error',
             message={
                 'action':'START',
-                'task':Task.types[self.task_number],
+                'task':Task.types[self.current_task_number],
                 'error_step':str(self.error_step),
                 'error_id':self.error_key},
             category='state'
@@ -186,7 +187,7 @@ class ErrorDetector:
                 target='ROS_Task_Step_Fix_Error',
                 message={
                     'action':'SUCCEEDED',
-                    'task':Task.types[self.task_number],
+                    'task':Task.types[self.current_task_number],
                     'error_step':str(self.error_step),
                     'error_id':self.error_key},
                 category='state'
@@ -204,7 +205,7 @@ class ErrorDetector:
                 message={
                     'action':'FAILED',
                     'error_step':str(self.error_step),
-                    'task':Task.types[self.task_number]},
+                    'task':Task.types[self.current_task_number]},
                 category='state'
             )
         else:
@@ -213,7 +214,7 @@ class ErrorDetector:
         self.task_pause = False
 
     def __correct_sequence(self):
-        self.task_dag = TaskToDag.mapping[self.task_number][1 if self.use_location else 0].subtask_info[self.error_step][4]
+        self.task_dag = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].subtask_info[self.error_step][4]
         self.task_sequence = []
         self.task_locations = []
 
@@ -230,7 +231,7 @@ class ErrorDetector:
                     message={
                         'action':'CANCELLED',
                         'error_step':str(self.error_step),
-                        'task':Task.types[self.task_number]},
+                        'task':Task.types[self.current_task_number]},
                     category='state'
                 )
 
@@ -247,15 +248,15 @@ class ErrorDetector:
                     task_num=request.id.task_number,
                     status=TaskStatus.ACTIVE,
                     text="ACTIVE")
-                self.last_task_number = request.id.task_number
+                self.current_task_number = request.id.task_number
                 self.current_location = 'L'
-                rospy.loginfo("error_detector: {}=START".format(Task.types[self.task_number]))
+                rospy.loginfo("error_detector: {}=START".format(Task.types[self.current_task_number]))
                 self.casas.publish(
                     package_type='ROS',
                     sensor_type='ROS_Task',
                     serial=self.mac_address,
                     target='ROS_Task',
-                    message={'action':'BEGIN', 'task':Task.types[self.task_number]},
+                    message={'action':'BEGIN', 'task':Task.types[self.current_task_number]},
                     category='state'
                 )
                 return TaskControllerResponse(response)
@@ -299,29 +300,93 @@ class ErrorDetector:
                 casas_events=True,
                 callback_function=self.__casas_cb)
 
-    def __is_exclude(self, task_number, sensor):
-        if (task_number in [Task.WATER_PLANTS, Task.TAKE_MEDS]) and (sensor in ['M056', 'M057']):
+    def __is_ambient_exclude(self, task_number, sensor):
+        # Is sensor included (1st floor ambient sensor)
+        if sensor.target not in Locations.decode.keys():
+            return True
+        elif (task_number in [Task.WATER_PLANTS, Task.TAKE_MEDS]) and (sensor.target in ['M056', 'M057']):
             # In TAKE_MEDS | WATER_PLANTS task,
             # when participant is at M018, it also triggers
             # hallway sensors M056 and M057 due to cateye sensors
             return True
-        elif (task_number in [Task.WATER_PLANTS, Task.TAKE_MEDS]) and (sensor == 'M023'):
+        elif (task_number in [Task.WATER_PLANTS, Task.TAKE_MEDS]) and (sensor.target == 'M023'):
             # Can sometimes get triggered when participant walks by
             return True
-        elif sensor == 'M060':
+        elif sensor.target == 'M060':
             # Starting 7/19/2018, all experiments shows that M060 is getting
             # triggered by participant while at M007 and M008.
             return True
-        elif sensor in ['M004', 'M005', 'M012', 'M011']:
+        elif sensor.target in ['M004', 'M005', 'M011', 'M012']:
             # When teleop was used in early participants, navigator
             # stayed below these sensors
             return True
+
+        # Exclude sensors that were unexpectedly triggered during experiments
+        # on and before 2018/7/25 when using estimotes + ambient sensors
+        if self.use_location and sensor.stamp < datetime(2018, 7, 26):
+            if self.task_dag is None:
+                task_end = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].task_end
+                task_key = task_end['current']
+            else:
+                task_key = self.task_dag['current']
+            task_step = TaskToDag.mapping[task_number][1].subtask[task_key]
+            loc_code = Locations.decode.get(sensor.target)
+
+            if task_number == Task.WATER_PLANTS:
+                # exclude hallway, kitchen hallway sensors
+                if loc_code in ['H', 'KH']:
+                    return True
+                # exclude kitchen sensors
+                elif task_step in [0, 3] and loc_code == 'K':
+                    return True
+                # participant transition to kitchen, exclude L, LD
+                elif task_step in [1, 4] and self.current_location == 'K' and loc_code in ['L', 'LD']:
+                    return True
+                # participant transition to living room, exclude K
+                elif task_step in [2, 5] and self.current_location in ['L', 'LD'] and loc_code == 'K':
+                    return True
+
+            elif task_number == Task.TAKE_MEDS:
+                # exclude kitchen hallway, hallway
+                if loc_code in ['H', 'KH']:
+                    return True
+                # participant transition to kitchen, exclude L, LD
+                elif task_step in [0, 4, 11] and self.current_location == 'K' and loc_code in ['L', 'LD']:
+                    return True
+                # participant transition to kitchen, exclude L, LD
+                elif task_step in [3, 5] and self.current_location in ['L', 'LD'] and loc_code == 'K':
+                    return True
+                # exclude living_entertainment, living_dining
+                elif task_step in [1, 2, 12] and loc_code in ['L', 'LD']:
+                    return True # get cup, fill cup
+                # exclude living_entertainment, kitchen
+                elif 6 <= task_step <= 10 and loc_code in ['L', 'K']:
+                    return True # sit chair, eat food, take meds, drink water, stand up
+
+            elif task_number == Task.WALK_DOG:
+                # exclude kitchen
+                if loc_code in ['K']:
+                    return True
+                # exclude living_entertainment and living_dining sensors
+                elif self.current_location in ['H', 'KH'] and loc_code in ['L', 'LD']:
+                    return True
+
         # Other excluded sensors (excluded in items.py)
         # M004, M005, M012, M011 - navigator position
         # M001 - too close to M023 (hallway)
         # M015 - too close to M016 (kitchen)
         # MA### - area sensors are too general and are triggerd by navigator
         return False
+
+    def __change_location(self, new_loc):
+        is_added = False
+        if self.use_location:
+            change_loc = '{}>{}'.format(self.current_location, new_loc)
+            self.sensors.append((change_loc, ''))
+            is_added = True
+        self.current_location = new_loc
+        rospy.loginfo("{}current location: {}{}".format(bcolors.WARNING, Locations.encode[self.current_location][1], bcolors.ENDC))
+        return is_added
 
     def __add_sensor_to_sequence(self, sensor, loc):
         is_estimote = sensor.target[:3] == 'EST' \
@@ -333,40 +398,46 @@ class ErrorDetector:
         is_added = False
 
         #Ambient sensors
-        if is_ambient_sensor and sensor.target in Locations.decode.keys():
-            if self.__is_exclude(self.task_number, sensor.target):
+        if is_ambient_sensor:
+            if  self.__is_ambient_exclude(self.current_task_number, sensor):
                 return False
 
             new_loc = Locations.decode[sensor.target]
             if self.current_location != new_loc:
-                if self.use_location:
-                    self.sensors.append(('{}>{}'.format(self.current_location, new_loc), ''))
+                if self.__change_location(new_loc):
                     is_added = True
-                self.current_location = new_loc
-                rospy.loginfo("{}current location: {}{}".format(bcolors.WARNING, Locations.encode[self.current_location][1], bcolors.ENDC))
+
         #Estimotes + Door sensors
         elif is_estimote or is_door_closed:
             code = Items.decode[sensor.target]
+
+            # Special Case (Ambient sensor by chair is not reliable)
+            if code == 'CH' and self.current_location != 'LD':
+                if self.__change_location('LD'):
+                    loc = self.current_location
+                    self.__error_detection()
+
             # Only include item used in the task
-            if self.task_number in Items.encode[code][2]:
+            if self.current_task_number in Items.encode[code][2]:
                 self.sensors.append((code, loc))
                 is_added = True
+
         return is_added
 
     def __check_error(self, new_sequence, new_location):
         if self.task_dag is None: # Task Completed
-            task_end = TaskToDag.mapping[self.task_number][1 if self.use_location else 0].task_end
+            task_end = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].task_end
             task_key = task_end['current']
-            task_step = TaskToDag.mapping[self.task_number][1 if self.use_location else 0].subtask[task_key]
+            task_step = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].subtask[task_key]
             result = (task_step, True, task_end['current'], True, 'Done')
         else:
             if not self.is_detect_error_gen_created:
                 task_key = self.task_dag['current']
-                task_step = TaskToDag.mapping[self.task_number][1 if self.use_location else 0].subtask[task_key]
+                task_step = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].subtask[task_key]
                 self.detect_error_gen = self.check_sequence(
                     self.task_dag,
                     task_step_num=task_step,
-                    num_tasks=TaskToDag.mapping[self.task_number][1 if self.use_location else 0].num_tasks,
+                    num_tasks=TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].num_tasks,
                     current=self.task_dag['current'])
                 self.is_detect_error_gen_created = True
 
@@ -413,22 +484,22 @@ class ErrorDetector:
             else:
                 # Check if a new step is completed in the sequence
                 if check_result[2] != check_result[4] and self.last_key != check_result[2] and check_result[1]:
-                    self.current_step = TaskToDag.mapping[self.task_number][1 if self.use_location else 0].subtask[check_result[2]]
+                    self.current_step = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].subtask[check_result[2]]
                     self.casas.publish(
                         package_type='ROS',
                         sensor_type='ROS_Task_Step',
                         serial=self.mac_address,
                         target='ROS_Task_Step',
                         message={
-                            'task':Task.types[self.task_number],
+                            'task':Task.types[self.current_task_number],
                             'step':str(self.current_step),
                             'id':check_result[2]},
                         category='state'
                     )
-                    rospy.loginfo('{}{} Task --- step {}: {} completed{}'.format(bcolors.OKGREEN, Task.types[self.task_number], self.current_step, check_result[2], bcolors.ENDC))
+                    rospy.loginfo('{}{} Task --- step {}: {} completed{}'.format(bcolors.OKGREEN, Task.types[self.current_task_number], self.current_step, check_result[2], bcolors.ENDC))
                     rospy.loginfo("{}next step: {}{}".format(bcolors.OKBLUE, check_result[4], bcolors.ENDC))
                     # NEW: exclude completed sequence
-                    self.task_dag = TaskToDag.mapping[self.last_task_number if self.task_number < 0 else self.task_number][1 if self.use_location else 0].subtask_info[self.current_step+1][3]
+                    self.task_dag = TaskToDag.mapping[self.current_task_number][1 if self.use_location else 0].subtask_info[self.current_step+1][3]
                     self.task_sequence = []
                     self.task_locations = []
                     self.last_key = check_result[2]
@@ -442,10 +513,16 @@ class ErrorDetector:
                     if pause:
                         # While pause, still update location
                         is_ambient_sensor = sensor.target[0] == 'M' and sensor.message == 'ON'
-                        if is_ambient_sensor and sensor.target in Locations.decode.keys():
-                            if not self.__is_exclude(self.task_number, sensor.target):
-                                self.current_location = Locations.decode[sensor.target]
-                                rospy.loginfo("{}current location: {}{}".format(bcolors.WARNING, Locations.encode[self.current_location][1], bcolors.ENDC))
+                        if is_ambient_sensor and not self.__is_ambient_exclude(self.current_task_number, sensor):
+                            self.current_location = Locations.decode[sensor.target]
+                            rospy.loginfo("{}current location: {}{}".format(bcolors.WARNING, Locations.encode[self.current_location][1], bcolors.ENDC))
+
+                        elif sensor.target[:3] == 'EST' and sensor.message == 'MOVED':
+                            # Chair is static at LD. Had an instance where
+                            # participant transition from K to LD, but no sensor in
+                            # LD triggered, but participant sat triggering CH estimote
+                            if sensor.target in ['EST301', 'EST310']:
+                                self.current_location = 'LD'
 
                     elif self.task_status.status == TaskStatus.ACTIVE and not pause: #not self.task_pause:
                         if self.__add_sensor_to_sequence(sensor, self.current_location):
