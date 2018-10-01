@@ -106,7 +106,7 @@ class WaterPlantsWithLocationDag(object):
         'next': 'rinse_can'
     }
     water_plantcoffee = {
-        'allow': ['P2', 'S', 'W', 'K>LD', 'LD>K', 'LD>L', 'L>LD'],
+        'allow': ['P2', 'S', 'W', 'K>LD', 'LD>K', 'LD>L', 'L>LD', 'K>L'],
         'P2': water_plantside,
         'current': 'water_plantcoffee',
         'next': 'water_plantside'
@@ -393,6 +393,12 @@ class TakeMedicationWithLocationDag(object):
         'current': 'take_med',
         'next': 'drink_water'
     }
+    eat_food_if_error = {
+        'allow': [('F', 'LD'), 'C', 'CH', 'K>LD'],
+        ('F', 'LD'): take_med,
+        'current': 'eat_food',
+        'next': 'take_med'
+    }
     eat_food = {
         'allow': [('F', 'LD'), 'C', 'CH'],
         ('F', 'LD'): take_med,
@@ -470,11 +476,11 @@ class TakeMedicationWithLocationDag(object):
         1:  ('Retrieve cup'         , 'glass'     , 'C'  , get_cup      , fill_cup),
         2:  ('Fill cup'             , 'sink'      , 'S'  , fill_cup     , put_food_cup),
         3:  ('Put food/cup on table', None        , 'K>L', put_food_cup , put_med),
-        4:  ('Retrieve medication'  , 'pillbottle', 'M'  , get_med      , eat_food),
-        5:  ('Put med on table'     , None        , 'K>L', put_med      , eat_food),
+        4:  ('Retrieve medication'  , 'pillbottle', 'M'  , get_med      , eat_food_if_error),
+        5:  ('Put med on table'     , None        , 'K>L', put_med      , eat_food_if_error),
         6:  ('Sit chair'            , None        , 'CH' , sit_chair    , take_med),
         7:  ('Eat food'             , None        , 'F'  , eat_food     , drink_water),
-        8:  ('Take medication'      , 'pills'     , 'PL'  , take_med     , stand_up),
+        8:  ('Take medication'      , 'pills'     , 'PL' , take_med     , stand_up),
         9:  ('Drink water'          , None        , 'C'  , drink_water  , rinse_cup),
         10: ('Stand up'             , None        , 'CH' , stand_up     , throw_garbage),
         11: ('Rinse cup'            , 'sink'      , 'C'  , rinse_cup    , None),
