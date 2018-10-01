@@ -2,7 +2,6 @@
 
 import rospy
 import rospkg
-import datetime
 import logging
 import configparser
 import csv
@@ -12,6 +11,7 @@ import sys
 import threading
 import yaml
 
+from datetime import datetime
 from collections import defaultdict, deque
 from adl.util import ConnectPythonLoggingToRos
 from adl.util import Task
@@ -128,7 +128,7 @@ class TestErrorDetector:
                     rospy.loginfo(row[0])
                     if len(row) == 0:
                         break
-                    dt = datetime.datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S.%f")
+                    dt = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S.%f")
                     if self.start_datetime is None:
                         self.start_datetime = dt
                     time_diff = (dt - self.start_datetime)
